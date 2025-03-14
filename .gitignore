@@ -2,4 +2,5 @@ runs/
 inference/
 config_reg/
 visualized_augmented_data/
-__pycache__/
+lib/__pycache__/
+lib/__pycache__/
