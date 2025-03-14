@@ -69,7 +69,6 @@ class YOLOX_Loss(nn.Module):
         for k, (stride_this_level, x) in enumerate(
             zip(self.strides, pred)
         ):
-
             output, grid = self.get_output_and_grid(
                 x, k, stride_this_level, x.type()
             )

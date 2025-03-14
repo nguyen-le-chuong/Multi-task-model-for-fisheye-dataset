@@ -23,13 +23,13 @@ from lib.models.common import Conv, seg_head, PSA_p, MergeBlock
 from lib.models.common import Concat, FPN_C2, FPN_C3, FPN_C4, ELANNet, ELANBlock_Head, PaFPNELAN, IDetect, RepConv
 # from lib.models.YOLOX_Head_scales import YOLOXHead
 from lib.models.YOLOX_Head_scales_noshare import YOLOXHead
-
+from lib.models.clr_head import CLRHead
 # 修改
 # The lane line and the driving area segment branches without share information with each other and without link
 YOLOP = [
 ###### prediction head index
 # [2, 16, 28],   #Det_out_idx, Da_Segout_idx, LL_Segout_idx no_use c2
-[2, 16, 31],   #Det_out_idx, Da_Segout_idx, LL_Segout_idx use_c2
+[2, 16, 31, 43, 56, 57],   #Det_out_idx, Da_Segout_idx, person, vehicle, LL_Segout_idx use_c2
 
 ###### Backbone
 [ -1, ELANNet, [True]],   #0
@@ -73,9 +73,6 @@ YOLOP = [
 # [ -1, Conv, [8, 2, 3, 1]], 
 # [ -1, seg_head, ['sigmoid']],  #28 segmentation head
 ###########
-
-# use C2
-###########
 [ 1, FPN_C2, []],  #17
 [ -1, Conv, [256, 128, 3, 1]],    #18
 # sum c2 and p3
@@ -92,6 +89,52 @@ YOLOP = [
 [ -1, Upsample, [None, 2, 'bilinear']], 
 [ -1, Conv, [8, 2, 3, 1]], #
 [ -1, seg_head, ['sigmoid']],  #31 segmentation head
+
+# [ 4, Conv, [512, 256, 3, 1]],  #17
+# [ -1, Upsample, [None, 2, 'bilinear']],  
+# [ -1, ELANBlock_Head, [256, 128]],
+# [ -1, Conv, [128, 64, 3, 1]],
+# [ -1, Upsample, [None, 2, 'bilinear']],
+# [ -1, Conv, [64, 32, 3, 1]],
+# [ -1, Upsample, [None, 2, 'bilinear']],
+# [ -1, Conv, [32, 16, 3, 1]],
+# [ -1, ELANBlock_Head, [16, 8]],
+# [ -1, Upsample, [None, 2, 'bilinear']],
+# [ -1, Conv, [8, 2, 3, 1]],
+# [ -1, seg_head, ['sigmoid']], #28  # Vehicle segmentation head
+
+[ 4, Conv, [512, 256, 3, 1]],  
+[ -1, Upsample, [None, 2, 'bilinear']],  
+[ -1, ELANBlock_Head, [256, 128]],
+[ -1, Conv, [128, 64, 3, 1]],
+[ -1, Upsample, [None, 2, 'bilinear']],
+[ -1, Conv, [64, 32, 3, 1]],
+[ -1, Upsample, [None, 2, 'bilinear']],
+[ -1, Conv, [32, 16, 3, 1]],
+[ -1, ELANBlock_Head, [16, 8]],
+[ -1, Upsample, [None, 2, 'bilinear']],
+[ -1, Conv, [8, 2, 3, 1]],
+[ -1, seg_head, ['sigmoid']], #43  # Vehicle segmentation head
+# use C2
+###########
+# [ 1, FPN_C2, []],  #44
+# [ -1, Conv, [256, 128, 3, 1]],    #45
+# sum c2 and p3
+[ 3, Conv, [256, 128, 3, 1]],  
+[ -1, Upsample, [None, 2, 'bilinear']],  
+[ [-1, 18], MergeBlock, ["add"]],    #C2 and P3
+[ -1, ELANBlock_Head, [128, 64]], 
+[ -1, PSA_p, [64, 64]], 
+[ -1, Conv, [64, 32, 3, 1]], 
+[ -1, Upsample, [None, 2, 'bilinear']], 
+[ -1, Conv, [32, 16, 3, 1]], 
+[ -1, ELANBlock_Head, [16, 8]], 
+[ -1, PSA_p, [8, 8]], 
+[ -1, Upsample, [None, 2, 'bilinear']], 
+[ -1, Conv, [8, 2, 3, 1]], #
+[ -1, seg_head, ['sigmoid']],  #56 segmentation head
+
+[1, CLRHead,  [1]],  #57 # New head
 
 # # use C2
 # ###########
@@ -125,11 +168,14 @@ class MCnet(nn.Module):
         layers, save= [], []
         self.nc = 1
         self.detector_index = -1
+        self.reg_index = -1
         # 27 
         self.det_out_idx = block_cfg[0][0]
 
         # 63 67
-        self.seg_out_idx = block_cfg[0][1:]
+        self.seg_out_idx = block_cfg[0][1:-1]
+
+        self.reg_out_idx = block_cfg[0][-1]
         
         # Build model
         # e.g. [ -1, Focus, [3, 32, 3]],   #0
@@ -140,6 +186,9 @@ class MCnet(nn.Module):
             if block is YOLOXHead:
                 # detector_index  # 27
                 self.detector_index = i
+
+            if block is CLRHead:
+                self.reg_index = i
 
             # *args,参数解码 [3, 32, 3] -> 3, 32, 3
             # 构建一系列模块，实例化block
@@ -154,6 +203,7 @@ class MCnet(nn.Module):
             # [ 6, 4, 14, 10, 23, 17, 20, 23, 25, 26, 26, 25, 23, 20, 17, 2, 37, 45, 51, 55, 57, 58, 59, 59 ]
             save.extend(x % i for x in ([from_] if isinstance(from_, int) else from_) if x != -1)  # append to savelist
         assert self.detector_index == block_cfg[0][0]
+        assert self.reg_index == block_cfg[0][-1]
 
         self.model, self.save = nn.Sequential(*layers), sorted(save)
         self.names = [str(i) for i in range(self.nc)]
@@ -176,13 +226,16 @@ class MCnet(nn.Module):
         cache = []
         out = []
         det_out = None
+        reg_out = None
         Da_fmap = []
         LL_fmap = []
         # block_.index = i, 模块索引, from 0,1,2,3....67
         # block_.from_ = from_，模块输入来源索引, -1 or list[-1, 16] or int(16)
         for i, block in enumerate(self.model):
+            # print(i, block.from_)
             if block.from_ != -1:
                 x = cache[block.from_] if isinstance(block.from_, int) else [x if j == -1 else cache[j] for j in block.from_]       #calculate concat detect
+            # print(i)
             x = block(x)
             if i in self.seg_out_idx:     #save driving area segment result
                 # x=x.float()
@@ -191,10 +244,13 @@ class MCnet(nn.Module):
                 out.append(x)
             if i == self.detector_index:
                 det_out = x
+            if i == self.reg_index:
+                reg_out = x
             cache.append(x if block.index in self.save else None)
             # cache[index] = x if block.index in self.save else None
 
         out.insert(0,det_out)
+        out.append(reg_out)
         # out include (det_out, DD_out, LL_out)
         return out            
 

@@ -26,11 +26,11 @@ def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):
     #         img[:, :, i] = cv2.equalizeHist(img[:, :, i])
 
 
-def random_perspective(combination, targets=(), degrees=10, translate=.1, scale=.1, shear=10, perspective=0.0, border=(0, 0)):
+def random_perspective(combination, targets=(), lane_reg=(), degrees=10, translate=.1, scale=.1, shear=10, perspective=0.0, border=(0, 0)):
     """combination of img transform"""
     # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-10, 10))
     # targets = [cls, xyxy]
-    img, gray, line = combination
+    img, gray, person, vehicle, line = combination
     height = img.shape[0] + border[0] * 2  # shape(h,w,c)
     width = img.shape[1] + border[1] * 2
 
@@ -68,10 +68,14 @@ def random_perspective(combination, targets=(), degrees=10, translate=.1, scale=
         if perspective:
             img = cv2.warpPerspective(img, M, dsize=(width, height), borderValue=(114, 114, 114))
             gray = cv2.warpPerspective(gray, M, dsize=(width, height), borderValue=0)
+            person = cv2.warpPerspective(person, M, dsize=(width, height), borderValue=0)
+            vehicle = cv2.warpPerspective(vehicle, M, dsize=(width, height), borderValue=0)
             line = cv2.warpPerspective(line, M, dsize=(width, height), borderValue=0)
         else:  # affine
             img = cv2.warpAffine(img, M[:2], dsize=(width, height), borderValue=(114, 114, 114))
             gray = cv2.warpAffine(gray, M[:2], dsize=(width, height), borderValue=0)
+            person = cv2.warpAffine(person, M[:2], dsize=(width, height), borderValue=0)
+            vehicle = cv2.warpAffine(vehicle, M[:2], dsize=(width, height), borderValue=0)
             line = cv2.warpAffine(line, M[:2], dsize=(width, height), borderValue=0)
 
     # Visualize
@@ -116,9 +120,39 @@ def random_perspective(combination, targets=(), degrees=10, translate=.1, scale=
         i = _box_candidates(box1=targets[:, 1:5].T * s, box2=new.T,  area_thr=0.2)
         targets = targets[i]
         targets[:, 1:5] = new[i]
-
-    combination = (img, gray, line)
-    return combination, targets
+    # print(lane_reg)
+    # if len(lane_reg):
+    #     lane_reg_new = []
+    #     for lane in lane_reg:
+    #         transformed_lane = []
+    #         for (x, y) in lane:
+    #             pt = np.array([x, y, 1.0])
+    #             pt_trans = M.dot(pt)
+    #             if perspective:
+    #                 pt_trans = pt_trans[:2] / pt_trans[2]
+    #             else:
+    #                 pt_trans = pt_trans[:2]
+    #             transformed_lane.append((pt_trans[0], pt_trans[1]))
+    #         # Optionally clip points to be within image bounds.
+    #         transformed_lane = [(np.clip(x, 0, width), np.clip(y, 0, height)) for (x, y) in transformed_lane]
+    #         lane_reg_new.append(transformed_lane)
+    transformed_points = []
+    for lane in lane_reg:
+        transformed_lane = []
+        for (x, y) in lane:
+            point = np.array([x, y, 1]).reshape(3, 1)
+            transformed = np.dot(M, point)
+            if perspective:
+                transformed /= transformed[2]  # Normalize for perspective
+            x_new, y_new = transformed[0, 0], transformed[1, 0]
+            # Clip the points to stay within image boundaries
+            x_new = np.clip(x_new, 0, width)
+            y_new = np.clip(y_new, 0, height)
+            transformed_lane.append((int(x_new), int(y_new)))
+        transformed_points.append(transformed_lane)
+    lane_reg = transformed_points
+    combination = (img, gray, person, vehicle, line)
+    return combination, targets, lane_reg
 
 
 def cutout(combination, labels):
@@ -173,7 +207,7 @@ def cutout(combination, labels):
 def letterbox(combination, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True):
     """Resize the input image and automatically padding to suitable shape :https://zhuanlan.zhihu.com/p/172121380"""
     # Resize image to a 32-pixel-multiple rectangle https://github.com/ultralytics/yolov3/issues/232
-    img, gray, line = combination
+    img, gray, person, vehicle, line = combination
     shape = img.shape[:2]  # current shape [height, width]
     if isinstance(new_shape, int):
         new_shape = (new_shape, new_shape)
@@ -200,17 +234,20 @@ def letterbox(combination, new_shape=(640, 640), color=(114, 114, 114), auto=Tru
     if shape[::-1] != new_unpad:  # resize
         img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
         gray = cv2.resize(gray, new_unpad, interpolation=cv2.INTER_LINEAR)
+        person = cv2.resize(person, new_unpad, interpolation=cv2.INTER_LINEAR)
+        vehicle = cv2.resize(vehicle, new_unpad, interpolation=cv2.INTER_LINEAR)
         line = cv2.resize(line, new_unpad, interpolation=cv2.INTER_LINEAR)
 
     top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-
     img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
     gray = cv2.copyMakeBorder(gray, top, bottom, left, right, cv2.BORDER_CONSTANT, value=0)  # add border
+    person = cv2.copyMakeBorder(person, top, bottom, left, right, cv2.BORDER_CONSTANT, value=0)  # add border
+    vehicle = cv2.copyMakeBorder(vehicle, top, bottom, left, right, cv2.BORDER_CONSTANT, value=0)  # add border
     line = cv2.copyMakeBorder(line, top, bottom, left, right, cv2.BORDER_CONSTANT, value=0)  # add border
     # print(img.shape)
     
-    combination = (img, gray, line)
+    combination = (img, gray, person, vehicle, line)
     return combination, ratio, (dw, dh)
 
 def letterbox_for_img(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True):

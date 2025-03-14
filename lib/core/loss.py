@@ -6,6 +6,7 @@ from .postprocess import build_targets
 from lib.core.evaluate import SegmentationMetric
 from torch.nn.modules.loss import _Loss
 from lib.models.YOLOX_Loss import YOLOX_Loss
+from lib.models.clr_loss import CLR_Loss
 #import torch.nn.functional as f
 #from typing import optional, list
 
@@ -23,7 +24,7 @@ class MultiHeadLoss(nn.Module):
         super().__init__()
         # lambdas: [cls, obj, iou, la_seg, ll_seg, ll_iou]
         if not lambdas:
-            lambdas = [1.0 for _ in range(len(losses) + 3)]
+            lambdas = [1.0 for _ in range(len(losses) + 5)]
         assert all(lam >= 0.0 for lam in lambdas)
 
         # loss_list = [BCEcls = FocalLoss, BCEobj = FocalLoss, BCEseg = nn.BCEWithLogitsLoss]
@@ -64,8 +65,8 @@ class MultiHeadLoss(nn.Module):
         cfg = self.cfg
         device = targets[0].device
 
-        Det_loss, Da_Seg_Loss, Ll_Seg_Loss, Tversky_Loss = self.loss_list
-
+        Det_loss, Da_Seg_Loss, Person_Seg_Loss, Vehicle_Seg_Loss, Ll_Seg_Loss, Tversky_Loss, Person_Tversky_Loss, CLR_Loss = self.loss_list
+        # print(targets[0])
         # ComputeLossOTA
         det_all_loss = Det_loss(predictions[0], targets[0], imgs)
 
@@ -76,28 +77,50 @@ class MultiHeadLoss(nn.Module):
         drive_area_seg_targets = targets[1].view(-1)
         da_seg_loss = Da_Seg_Loss(drive_area_seg_predicts, drive_area_seg_targets)
 
+        # person segmentation loss
+        # predictions[2] = shape( B 2 H W ) ， 两个channel代表前景（1）与背景（0）
+        person_seg_predicts = predictions[2].view(-1)
+        # target[2] = shape( B 2 H W )
+        person_seg_targets = targets[2].view(-1)
+ 
+        person_seg_loss = Person_Seg_Loss(person_seg_predicts, person_seg_targets)
+
+        # vehicle segmentation loss
+        # predictions[3] = shape( B 2 H W ) ， 两个channel代表前景（1）与背景（0）
+        vehicle_seg_predicts = predictions[3].view(-1)
+        # target[3] = shape( B 2 H W )
+        vehicle_seg_targets = targets[3].view(-1)
+        vehicle_seg_loss = Vehicle_Seg_Loss(vehicle_seg_predicts, vehicle_seg_targets)
+
         # lane line focal loss
         # predictions[2] = shape( B 2 H W ) ， 两个channel代表前景（1）与背景（0）
-        lane_line_seg_predicts = predictions[2].view(-1)
+        lane_line_seg_predicts = predictions[4].view(-1)
         # target[2] = shape( B 2 H W ) 
-        lane_line_seg_targets = targets[2].view(-1)
+        lane_line_seg_targets = targets[4].view(-1)
         ll_seg_loss = Ll_Seg_Loss(lane_line_seg_predicts, lane_line_seg_targets)
 
         # predictions[1] = shape( B 3 H W ) ， dim0=bg, dim1 = road, dim2 = lane
-        tversky_predicts = predictions[2]
+        tversky_predicts = predictions[4]
         # target[1] = shape( B 3 H W ) ,   dim0=bg, dim1 = road, dim2 = lane
-        tversky_targets = targets[2]
+        tversky_targets = targets[4]
         ll_tversky_loss = Tversky_Loss(tversky_predicts, tversky_targets)
+        person_tversky_loss = Person_Tversky_Loss(predictions[2], targets[2])
 
-
+        #lane regression 
+        reg_all_loss = CLR_Loss(predictions[5], targets[5], ll_seg_loss)
+        # print(targets[5])
         det_all_loss *= 0.02 * self.lambdas[1]
         da_seg_loss *= 0.2 * self.lambdas[2]
-        ll_seg_loss *= 0.2 * self.lambdas[3]
-        ll_tversky_loss *= 0.2 * self.lambdas[4]
+        person_seg_loss *= 0.2 * self.lambdas[3]
+        person_tversky_loss *= 0.2 * self.lambdas[4]
+        vehicle_seg_loss *= 0.2 * self.lambdas[5]
+        ll_seg_loss *= 0.2 * self.lambdas[6]
+        ll_tversky_loss *= 0.2 * self.lambdas[7]
+        reg_all_loss *= 0.02 * self.lambdas[8]
         
-        loss = det_all_loss + da_seg_loss + ll_seg_loss + ll_tversky_loss
+        loss = det_all_loss + da_seg_loss + person_seg_loss +  person_tversky_loss + vehicle_seg_loss + ll_seg_loss + ll_tversky_loss + reg_all_loss
 
-        return loss, (det_all_loss.item(), da_seg_loss.item(), ll_seg_loss.item(), ll_tversky_loss.item(), loss.item())
+        return loss, (det_all_loss.item(), da_seg_loss.item(), person_seg_loss.item(), person_tversky_loss.item(), vehicle_seg_loss.item(), ll_seg_loss.item(), ll_tversky_loss.item(), reg_all_loss.item(),  loss.item())
 
 
 def get_loss(cfg, device, model):
@@ -119,17 +142,25 @@ def get_loss(cfg, device, model):
     # segmentation loss criteria
     Da_Seg_Loss = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([cfg.LOSS.SEG_POS_WEIGHT])).to(device)
 
+    Person_Seg_Loss = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([cfg.LOSS.SEG_POS_WEIGHT])).to(device)
+
+    Vehicle_Seg_Loss = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([cfg.LOSS.SEG_POS_WEIGHT])).to(device)
+
     Ll_Seg_Loss = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([cfg.LOSS.SEG_POS_WEIGHT])).to(device)
+
+    Reg_loss = CLR_Loss(cfg).to(device)
 
     # Tversky_Loss criteria
     Tversky_Loss = TverskyLoss(alpha=0.7, beta=0.3, gamma=4.0 / 3).to(device)
+    Person_Tversky_Loss = TverskyLoss(alpha=0.5, beta=0.5, gamma=4.0 / 3).to(device)
 
     # Focal loss
     gamma = cfg.LOSS.FL_GAMMA  # focal loss gamma
     if gamma > 0.0:
         Ll_Seg_Loss = FocalLossSeg(Ll_Seg_Loss, gamma)
+        Person_Seg_Loss = FocalLossSeg(Person_Seg_Loss, gamma)
 
-    loss_list = [Det_loss, Da_Seg_Loss, Ll_Seg_Loss, Tversky_Loss]
+    loss_list = [Det_loss, Da_Seg_Loss, Person_Seg_Loss, Vehicle_Seg_Loss, Ll_Seg_Loss, Tversky_Loss, Person_Tversky_Loss, Reg_loss]
     loss = MultiHeadLoss(loss_list, cfg=cfg, lambdas=cfg.LOSS.MULTI_HEAD_LAMBDA)
     return loss
 

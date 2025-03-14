@@ -3,6 +3,7 @@ from lib.core.evaluate import ConfusionMatrix,SegmentationMetric
 from lib.core.general import non_max_suppression,check_img_size,scale_coords,xyxy2xywh,xywh2xyxy,box_iou,coco80_to_coco91_class,plot_images,ap_per_class,output_to_target
 from lib.utils.utils import time_synchronized
 from lib.utils import plot_img_and_mask,plot_one_box,show_seg_result
+from lib.utils.visualization import imshow_lanes
 import torch
 from threading import Thread
 import numpy as np
@@ -16,7 +17,7 @@ import os
 import math
 from torch.cuda import amp
 from tqdm import tqdm
-
+import itertools
 def train(cfg, train_loader, model, criterion, optimizer, scaler, epoch, num_batch, num_warmup,
           writer_dict, logger, device, rank = -1):
     """
@@ -43,12 +44,15 @@ def train(cfg, train_loader, model, criterion, optimizer, scaler, epoch, num_bat
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
-
+    # print(device)
     # switch to train mode
     model.train()
     start = time.time()
 
     for i, (input, target, paths, shapes) in enumerate(train_loader):
+        # print(i)
+        # if i < 820:
+        #     continue
         intermediate = time.time()
         #print('tims:{}'.format(intermediate-start))
         num_iter = i + num_batch * (epoch - 1)
@@ -69,19 +73,23 @@ def train(cfg, train_loader, model, criterion, optimizer, scaler, epoch, num_bat
         if not cfg.DEBUG:
             input = input.to(device, non_blocking=True)
             assign_target = []
-            for tgt in target:
-                assign_target.append(tgt.to(device))
+            for k, tgt in enumerate(target):
+                if k != len(target) - 1:
+                    assign_target.append(tgt.to(device))
+                else:
+                    assign_target.append(tgt)
             target = assign_target
         with amp.autocast(enabled=device.type != 'cpu'):
             outputs = model(input)
+            # print(outputs)
             total_loss, head_losses = criterion(outputs, target, shapes,model,input)            
-
+        det_all_loss, da_seg_loss, person_seg_loss, person_tversky_loss, vehicle_seg_loss, ll_seg_loss, ll_tversky_loss, reg_loss, loss = head_losses
         # compute gradient and do update step
         optimizer.zero_grad()
         scaler.scale(total_loss).backward()
         scaler.step(optimizer)
         scaler.update()
-
+        # print(rank)
         if rank in [-1, 0]:
             # measure accuracy and record loss
             losses.update(total_loss.item(), input.size(0))
@@ -93,23 +101,71 @@ def train(cfg, train_loader, model, criterion, optimizer, scaler, epoch, num_bat
             # measure elapsed time
             batch_time.update(time.time() - start)
             end = time.time()
+            # print(i)
             if i % cfg.PRINT_FREQ == 0:
-                msg = 'Epoch: [{0}][{1}/{2}]\t' \
-                      'Time {batch_time.val:.3f}s ({batch_time.avg:.3f}s)\t' \
-                      'Speed {speed:.1f} samples/s\t' \
-                      'Data {data_time.val:.3f}s ({data_time.avg:.3f}s)\t' \
-                      'Loss {loss.val:.5f} ({loss.avg:.5f})'.format(
-                          epoch, i, len(train_loader), batch_time=batch_time,
-                          speed=input.size(0)/batch_time.val,
-                          data_time=data_time, loss=losses)
-                
+                msg = (
+                    'Epoch: [{0}][{1}/{2}]\t'
+                    'Time {batch_time.val:.3f}s ({batch_time.avg:.3f}s)\t'
+                    'Speed {speed:.1f} samples/s\t'
+                    'Data {data_time.val:.3f}s ({data_time.avg:.3f}s)\t'
+                    'Total Loss {loss.val:.5f} ({loss.avg:.5f})\t'
+                    'Det Loss {det_loss:.5f}\t'
+                    'DA Seg Loss {da_seg_loss:.5f}\t'
+                    'Person Seg Loss {person_seg_loss:.5f}\t'
+                    'Person Tversky Loss {person_tversky_loss:.5f}\t'
+                    'Vehicle Seg Loss {vehicle_seg_loss:.5f}\t'
+                    'Lane Seg Loss {ll_seg_loss:.5f}\t'
+                    'Lane Tversky Loss {ll_tversky_loss:.5f}\t'
+                    'Lane Regression Loss {ll_reg_loss:.5f}'
+                ).format(
+                    epoch, i, len(train_loader),
+                    batch_time=batch_time,
+                    speed=input.size(0)/batch_time.val,
+                    data_time=data_time,
+                    loss=losses,
+                    det_loss=det_all_loss,
+                    da_seg_loss=da_seg_loss,
+                    person_seg_loss=person_seg_loss,
+                    person_tversky_loss=person_tversky_loss,
+                    vehicle_seg_loss=vehicle_seg_loss,
+                    ll_seg_loss=ll_seg_loss,
+                    ll_tversky_loss=ll_tversky_loss, 
+                    ll_reg_loss = reg_loss
+                )
+
                 logger.info(msg)
 
                 writer = writer_dict['writer']
                 global_steps = writer_dict['train_global_steps']
                 writer.add_scalar('train_loss', losses.val, global_steps)
-                # writer.add_scalar('train_acc', acc.val, global_steps)
+                writer.add_scalar('det_loss', det_all_loss, global_steps)
+                writer.add_scalar('da_seg_loss', da_seg_loss, global_steps)
+                writer.add_scalar('person_seg_loss', person_seg_loss, global_steps)
+                writer.add_scalar('person_tversky_loss', person_tversky_loss, global_steps)
+                writer.add_scalar('vehicle_seg_loss', vehicle_seg_loss, global_steps)
+                writer.add_scalar('lane_seg_loss', ll_seg_loss, global_steps)
+                writer.add_scalar('lane_tversky_loss', ll_tversky_loss, global_steps)
+                writer.add_scalar('lane_regression_loss', reg_loss, global_steps)
+
                 writer_dict['train_global_steps'] = global_steps + 1
+            # if i % cfg.PRINT_FREQ == 0:
+            #     msg = 'Epoch: [{0}][{1}/{2}]\t' \
+            #           'Time {batch_time.val:.3f}s ({batch_time.avg:.3f}s)\t' \
+            #           'Speed {speed:.1f} samples/s\t' \
+            #           'Data {data_time.val:.3f}s ({data_time.avg:.3f}s)\t' \
+            #           'Loss {loss.val:.5f} ({loss.avg:.5f})'.format(
+            #               epoch, i, len(train_loader), batch_time=batch_time,
+            #               speed=input.size(0)/batch_time.val,
+            #               data_time=data_time, loss=losses)
+                
+            #     logger.info(msg)
+
+            #     writer = writer_dict['writer']
+            #     global_steps = writer_dict['train_global_steps']
+            #     writer.add_scalar('train_loss', losses.val, global_steps)
+            #     # writer.add_scalar('train_acc', acc.val, global_steps)
+            #     writer_dict['train_global_steps'] = global_steps + 1
+
 
 
 def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir,
@@ -159,7 +215,10 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
     seen =  0 
     confusion_matrix = ConfusionMatrix(nc=model.nc) #detector confusion matrix
     da_metric = SegmentationMetric(config.num_seg_class) #segment confusion matrix    
-    ll_metric = SegmentationMetric(2) #segment confusion matrix
+    person_metric = SegmentationMetric(2) #segment confusion matrix
+    vehicle_metric = SegmentationMetric(config.num_seg_class) #segment confusion matrix
+    ll_metric = SegmentationMetric(2) #segment confusion matrix 
+    
 
     names = {k: v for k, v in enumerate(model.names if hasattr(model, 'names') else model.module.names)}
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
@@ -174,6 +233,14 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
     da_IoU_seg = AverageMeter()
     da_mIoU_seg = AverageMeter()
 
+    person_acc_seg = AverageMeter()
+    person_IoU_seg = AverageMeter()
+    person_mIoU_seg = AverageMeter()
+
+    vehicle_acc_seg = AverageMeter()
+    vehicle_IoU_seg = AverageMeter()
+    vehicle_mIoU_seg = AverageMeter()
+
     ll_acc_seg = AverageMeter()
     ll_IoU_seg = AverageMeter()
     ll_mIoU_seg = AverageMeter()
@@ -184,13 +251,16 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
     # switch to eval mode
     model.eval()
     jdict, stats, ap, ap_class, wandb_images = [], [], [], [], []
-
+    lane_predictions = []
     for batch_i, (img, target, paths, shapes) in tqdm(enumerate(val_loader), total=len(val_loader)):
         if not config.DEBUG:
             img = img.to(device, non_blocking=True)
             assign_target = []
-            for tgt in target:
-                assign_target.append(tgt.to(device))
+            for k, tgt in enumerate(target):
+                if k != len(target) - 1:
+                    assign_target.append(tgt.to(device))
+                else:
+                    assign_target.append(tgt)
             target = assign_target
             nb, _, height, width = img.shape    #batch size, channel, height, width
 
@@ -201,7 +271,8 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
             ratio = shapes[0][1][0][0]
 
             t = time_synchronized()
-            det_out, da_seg_out, ll_seg_out = model(img)
+            det_out, da_seg_out, person_seg_out, vehicle_seg_out, ll_seg_out, (lane_reg_out, lan_reg_lists) = model(img)
+            lane_predictions.extend(lane_reg_out)
             t_inf = time_synchronized() - t
             if batch_i > 0:
                 T_inf.update(t_inf/img.size(0),img.size(0))
@@ -224,9 +295,42 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
             da_IoU_seg.update(da_IoU,img.size(0))
             da_mIoU_seg.update(da_mIoU,img.size(0))
 
+            #person segment evaluation
+            _,person_predict=torch.max(person_seg_out, 1)
+            _,person_gt=torch.max(target[2], 1)
+            person_predict = person_predict[:, pad_h:height-pad_h, pad_w:width-pad_w]
+            person_gt = person_gt[:, pad_h:height-pad_h, pad_w:width-pad_w]
+
+            person_metric.reset()
+            person_metric.addBatch(person_predict.cpu(), person_gt.cpu())
+            person_acc = person_metric.pixelAccuracy()
+            person_IoU = person_metric.IntersectionOverUnion()
+            person_mIoU = person_metric.meanIntersectionOverUnion()
+
+            person_acc_seg.update(person_acc,img.size(0))
+            person_IoU_seg.update(person_IoU,img.size(0))
+            person_mIoU_seg.update(person_mIoU,img.size(0))
+
+            #vehicle segment evaluation
+            _,vehicle_predict=torch.max(vehicle_seg_out, 1)
+            _,vehicle_gt=torch.max(target[3], 1)
+            vehicle_predict = vehicle_predict[:, pad_h:height-pad_h, pad_w:width-pad_w]
+            vehicle_gt = vehicle_gt[:, pad_h:height-pad_h, pad_w:width-pad_w]
+
+            vehicle_metric.reset()
+            vehicle_metric.addBatch(vehicle_predict.cpu(), vehicle_gt.cpu())
+            vehicle_acc = vehicle_metric.pixelAccuracy()
+            vehicle_IoU = vehicle_metric.IntersectionOverUnion()
+            vehicle_mIoU = vehicle_metric.meanIntersectionOverUnion()
+
+            vehicle_acc_seg.update(vehicle_acc,img.size(0))
+            vehicle_IoU_seg.update(vehicle_IoU,img.size(0))
+            vehicle_mIoU_seg.update(vehicle_mIoU,img.size(0))
+
+
             #lane line segment evaluation
             _,ll_predict=torch.max(ll_seg_out, 1)
-            _,ll_gt=torch.max(target[2], 1)
+            _,ll_gt=torch.max(target[4], 1)
             ll_predict = ll_predict[:, pad_h:height-pad_h, pad_w:width-pad_w]
             ll_gt = ll_gt[:, pad_h:height-pad_h, pad_w:width-pad_w]
 
@@ -239,8 +343,9 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
             ll_acc_seg.update(ll_acc,img.size(0))
             ll_IoU_seg.update(ll_IoU,img.size(0))
             ll_mIoU_seg.update(ll_mIoU,img.size(0))
+            #lane 
             
-            total_loss, head_losses = criterion((train_out,da_seg_out,ll_seg_out), target, shapes,model, img )   #Compute loss
+            total_loss, head_losses = criterion((train_out,da_seg_out, person_seg_out, vehicle_seg_out, ll_seg_out, lan_reg_lists), target, shapes,model, img )   #Compute loss
             losses.update(total_loss.item(), img.size(0))
 
             #NMS         
@@ -253,7 +358,106 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
             t_nms = time_synchronized() - t
             if batch_i > 0:
                 T_nms.update(t_nms/img.size(0),img.size(0))
+            if config.TEST.PLOTS:
+                if batch_i == 0:
+                    for i in range(test_batch_size):
+                        img_test = cv2.imread(paths[i])
+                        da_seg_mask = da_seg_out[i][:, pad_h:height-pad_h, pad_w:width-pad_w].unsqueeze(0)
+                        da_seg_mask = torch.nn.functional.interpolate(da_seg_mask, scale_factor=int(1/ratio), mode='bilinear')
+                        _, da_seg_mask = torch.max(da_seg_mask, 1)
 
+                        da_gt_mask = target[1][i][:, pad_h:height-pad_h, pad_w:width-pad_w].unsqueeze(0)
+                        da_gt_mask = torch.nn.functional.interpolate(da_gt_mask, scale_factor=int(1/ratio), mode='bilinear')
+                        _, da_gt_mask = torch.max(da_gt_mask, 1)
+
+                        da_seg_mask = da_seg_mask.int().squeeze().cpu().numpy()
+                        da_gt_mask = da_gt_mask.int().squeeze().cpu().numpy()
+                        # seg_mask = seg_mask > 0.5
+                        # plot_img_and_mask(img_test, seg_mask, i,epoch,save_dir)
+                        img_test1 = img_test.copy()
+                        _ = show_seg_result(img_test, da_seg_mask, i,epoch,save_dir, seg_type="da")
+                        _ = show_seg_result(img_test1, da_gt_mask, i, epoch, save_dir, seg_type="da", is_gt=True)
+
+                        img_person = cv2.imread(paths[i])
+                        person_seg_mask = person_seg_out[i][:, pad_h:height-pad_h, pad_w:width-pad_w].unsqueeze(0)
+                        person_seg_mask = torch.nn.functional.interpolate(person_seg_mask, scale_factor=int(1/ratio), mode='bilinear')
+                        _, person_seg_mask = torch.max(person_seg_mask, 1)
+
+                        person_gt_mask = target[2][i][:, pad_h:height-pad_h, pad_w:width-pad_w].unsqueeze(0)
+                        person_gt_mask = torch.nn.functional.interpolate(person_gt_mask, scale_factor=int(1/ratio), mode='bilinear')
+                        _, person_gt_mask = torch.max(person_gt_mask, 1)
+
+                        person_seg_mask = person_seg_mask.int().squeeze().cpu().numpy()
+                        person_gt_mask = person_gt_mask.int().squeeze().cpu().numpy()
+                        # seg_mask = seg_mask > 0.5
+                        # plot_img_and_mask(img_test, seg_mask, i,epoch,save_dir)
+                        img_person1 = img_person.copy()
+                        _ = show_seg_result(img_person, person_seg_mask, i,epoch,save_dir, seg_type="person")
+                        _ = show_seg_result(img_person1, person_gt_mask, i, epoch, save_dir, is_gt=True, seg_type="person")
+
+                        img_vehicle = cv2.imread(paths[i])
+                        vehicle_seg_mask = vehicle_seg_out[i][:, pad_h:height-pad_h, pad_w:width-pad_w].unsqueeze(0)
+                        vehicle_seg_mask = torch.nn.functional.interpolate(vehicle_seg_mask, scale_factor=int(1/ratio), mode='bilinear')
+                        _, vehicle_seg_mask = torch.max(vehicle_seg_mask, 1)
+
+                        vehicle_gt_mask = target[3][i][:, pad_h:height-pad_h, pad_w:width-pad_w].unsqueeze(0)
+                        vehicle_gt_mask = torch.nn.functional.interpolate(vehicle_gt_mask, scale_factor=int(1/ratio), mode='bilinear')
+                        _, vehicle_gt_mask = torch.max(vehicle_gt_mask, 1)
+
+                        vehicle_seg_mask = vehicle_seg_mask.int().squeeze().cpu().numpy()
+                        vehicle_gt_mask = vehicle_gt_mask.int().squeeze().cpu().numpy()
+                        # seg_mask = seg_mask > 0.5
+                        # plot_img_and_mask(img_test, seg_mask, i,epoch,save_dir)
+                        img_vehicle1 = img_vehicle.copy()
+                        _ = show_seg_result(img_vehicle, vehicle_seg_mask, i,epoch,save_dir, seg_type="vehicle")
+                        _ = show_seg_result(img_vehicle1, vehicle_gt_mask, i, epoch, save_dir, is_gt=True, seg_type="vehicle")
+
+
+                        img_ll = cv2.imread(paths[i])
+                        ll_seg_mask = ll_seg_out[i][:, pad_h:height-pad_h, pad_w:width-pad_w].unsqueeze(0)
+                        ll_seg_mask = torch.nn.functional.interpolate(ll_seg_mask, scale_factor=int(1/ratio), mode='bilinear')
+                        _, ll_seg_mask = torch.max(ll_seg_mask, 1)
+
+                        ll_gt_mask = target[4][i][:, pad_h:height-pad_h, pad_w:width-pad_w].unsqueeze(0)
+                        ll_gt_mask = torch.nn.functional.interpolate(ll_gt_mask, scale_factor=int(1/ratio), mode='bilinear')
+                        _, ll_gt_mask = torch.max(ll_gt_mask, 1)
+
+                        ll_seg_mask = ll_seg_mask.int().squeeze().cpu().numpy()
+                        ll_gt_mask = ll_gt_mask.int().squeeze().cpu().numpy()
+                        # seg_mask = seg_mask > 0.5
+                        # plot_img_and_mask(img_test, seg_mask, i,epoch,save_dir)
+                        img_ll1 = img_ll.copy()
+                        _ = show_seg_result(img_ll, ll_seg_mask, i,epoch,save_dir, seg_type="ll")
+                        _ = show_seg_result(img_ll1, ll_gt_mask, i, epoch, save_dir, seg_type="ll", is_gt=True)
+
+                        img_det = cv2.imread(paths[i])
+                        img_gt = img_det.copy()
+                        det = output[i].clone()
+                        if len(det):
+                            det[:,:4] = scale_coords(img[i].shape[1:],det[:,:4],img_det.shape).round()
+                        for *xyxy,conf,cls in reversed(det):
+                            #print(cls)
+                            label_det_pred = f'{names[int(cls)]} {conf:.2f}'
+                            plot_one_box(xyxy, img_det , label=label_det_pred, color=colors[int(cls)], line_thickness=3)
+                        cv2.imwrite(save_dir+"/batch_{}_det_pred.png".format(i),img_det)
+
+                        lane_reg_pred = lane_reg_out[i]
+                        # for lane_pred in lane_reg_pred:
+                        lanes = [lane.to_array(config) for lane in lane_reg_pred]
+                        imshow_lanes(img_gt, lanes, out_file=save_dir+"/batch_{}_lane_reg_pred.png".format(i))
+
+                        # labels = target[0][target[0][:, 0] == i, 1:]
+                        # # print(labels)
+                        # labels[:,1:5]=xywh2xyxy(labels[:,1:5])
+                        # if len(labels):
+                        #     labels[:,1:5]=scale_coords(img[i].shape[1:],labels[:,1:5],img_gt.shape).round()
+                        # for cls,x1,y1,x2,y2 in labels:
+                        #     #print(names)
+                        #     #print(cls)
+                        #     label_det_gt = f'{names[int(cls)]}'
+                        #     xyxy = (x1,y1,x2,y2)
+                        #     plot_one_box(xyxy, img_gt , label=label_det_gt, color=colors[int(cls)], line_thickness=3)
+                        # cv2.imwrite(save_dir+"/batch_{}_det_gt.png".format(i),img_gt)
         # Statistics per image
         # output([xyxy,conf,cls])
         # target[0] ([img_id,cls,xyxy])
@@ -425,6 +629,8 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
         maps[c] = ap[i]
 
     da_segment_result = (da_acc_seg.avg,da_IoU_seg.avg,da_mIoU_seg.avg)
+    person_segment_result = (person_acc_seg.avg,person_IoU_seg.avg,person_mIoU_seg.avg)
+    vehicle_segment_result = (vehicle_acc_seg.avg,vehicle_IoU_seg.avg,vehicle_mIoU_seg.avg)
     ll_segment_result = (ll_acc_seg.avg,ll_IoU_seg.avg,ll_mIoU_seg.avg)
 
     # print(da_segment_result)
@@ -433,7 +639,11 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
     # print('mp:{},mr:{},map50:{},map:{}'.format(mp, mr, map50, map))
     #print segmet_result
     t = [T_inf.avg, T_nms.avg]
-    return da_segment_result, ll_segment_result, detect_result, losses.avg, maps, t
+
+    ###################lane regression
+    results_lane, metric_lane = val_loader.dataset.evaluate_lane(lane_predictions, save_dir)
+
+    return da_segment_result, person_segment_result, vehicle_segment_result, ll_segment_result, detect_result, losses.avg, maps, t, metric_lane, results_lane
         
 
 

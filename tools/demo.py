@@ -106,19 +106,21 @@ def detect(cfg,opt):
         img = img.half() if half else img.float()  # uint8 to fp16/32
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
-
+        
         # Inference
-        det_out, da_seg_out,ll_seg_out = model(img)
+        det_out, da_seg_out, person_seg_out, vehicle_seg_out, ll_seg_out = model(img)
         inf_out, _ = det_out
 
         # Apply NMS
         det_pred = non_max_suppression(inf_out, conf_thres=opt.conf_thres, iou_thres=opt.iou_thres, classes=None, agnostic=False)
 
         det=det_pred[0]
-
+        if 'right' not in Path(path).name:
+            continue
         save_path = str(opt.save_dir +'/'+ Path(path).name) if dataset.mode != 'stream' else str(opt.save_dir + '/' + "web.mp4")
 
         _, _, height, width = img.shape
+        print(img_det.shape)
         h,w,_=img_det.shape
         pad_w, pad_h = shapes[1][1]
         pad_w = int(pad_w)
@@ -129,28 +131,45 @@ def detect(cfg,opt):
         da_seg_mask = torch.nn.functional.interpolate(da_predict, size=(h ,w ), mode='bilinear')
         _, da_seg_mask = torch.max(da_seg_mask, 1)
         da_seg_mask = da_seg_mask.int().squeeze()
+
+        person_predict = person_seg_out[:, :, pad_h:(height-pad_h),pad_w:(width-pad_w)]
+        person_seg_mask = torch.nn.functional.interpolate(person_predict, size=(h ,w ), mode='bilinear')
+        _, person_seg_mask = torch.max(person_seg_mask, 1)
+        person_seg_mask = person_seg_mask.int().squeeze()
+
+        vehicle_predict = vehicle_seg_out[:, :, pad_h:(height-pad_h),pad_w:(width-pad_w)]
+        vehicle_seg_mask = torch.nn.functional.interpolate(vehicle_predict, size=(h ,w ), mode='bilinear')
+        _, vehicle_seg_mask = torch.max(vehicle_seg_mask, 1)
+        vehicle_seg_mask = vehicle_seg_mask.int().squeeze()
         
         ll_predict = ll_seg_out[:, :,pad_h:(height-pad_h),pad_w:(width-pad_w)]
         ll_seg_mask = torch.nn.functional.interpolate(ll_predict,  size=(h ,w ), mode='bilinear')
         _, ll_seg_mask = torch.max(ll_seg_mask, 1)
         ll_seg_mask = ll_seg_mask.int().squeeze()
 
-        da_seg_mask = da_seg_mask-ll_seg_mask
+        da_seg_mask = da_seg_mask-ll_seg_mask-vehicle_seg_mask
         road_1 = torch.zeros_like(da_seg_mask)
+        vehicle_1 = torch.zeros_like(vehicle_seg_mask )
         # road
         road_1[da_seg_mask == 1] = 1
+        vehicle_1[vehicle_seg_mask == 1] = 1
         da_seg_mask = road_1
+        vehicle_seg_mask = vehicle_1
         da_seg_mask = da_seg_mask.cpu().numpy()
+        person_seg_mask = person_seg_mask.cpu().numpy()
+        vehicle_seg_mask = vehicle_seg_mask.cpu().numpy()
         ll_seg_mask = ll_seg_mask.cpu().numpy() 
 
         if dataset.mode == 'images':
             # # convert to BGR
             img_det = img_det[..., ::-1]
-            
-            img_det = show_seg_result(img_det, (da_seg_mask, ll_seg_mask), _, _, is_demo=True)
-            
+
+            img_det = show_seg_result(img_det, (da_seg_mask, person_seg_mask, vehicle_seg_mask, ll_seg_mask), _, _, is_demo=True)
+            img_det = cv2.resize(img_det, (1280, 800), interpolation=cv2.INTER_LINEAR)
             if len(det):
-                det[:,:4] = scale_coords(img.shape[2:],det[:,:4],img_det.shape).round()
+                #print('img', img.shape[2:])
+                # print(img_det.shape)
+                det[:,:4] = scale_coords(img.shape[2:],det[:,:4],(800, 1280, 3)).round()
                 for *xyxy,conf,cls in reversed(det):
                     label_det_pred = f'{conf:.2f}'
                     plot_one_box(xyxy, img_det , label=label_det_pred, color=(0,255,255), line_thickness=2)       

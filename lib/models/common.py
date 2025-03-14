@@ -1282,6 +1282,7 @@ class ELANNet(nn.Module):
         self.use_C2 = use_C2
  
     def forward(self, x):
+        # print(x.size())
         x = self.layer_1(x)
         c2 = self.layer_2(x)
         c3 = self.layer_3(c2)
@@ -1330,6 +1331,9 @@ class PaFPNELAN(nn.Module):
 
         # self.SPPF = SPPF(c5, 512)
         self.SPPF = GhostSPPCSPC(c5, 512)
+        self.refine_p3 = Conv(128, 64, k=3, p=1, act=act)  # From 128 to 64
+        self.refine_p4 = Conv(256, 64, k=3, p=1, act=act)  # From 256 to 64
+        self.refine_p5 = Conv(512, 64, k=3, p=1, act=act)  # 
 
     def forward(self, features):
         # c3, c4, c5
@@ -1350,19 +1354,28 @@ class PaFPNELAN(nn.Module):
         c11 = F.interpolate(c10, scale_factor=2.0)
         c12 = torch.cat([c11, self.cv4(c3)], dim=1)
         c13 = self.head_elan_2(c12)
-
+        # c5, c8, c12
+        # print(c5.size(), c8.size(), c.size())
+        # print('c13', c6.size())
         # Bottom up
         # p3 -> P4
         c14 = self.mp1(c13)
         c15 = torch.cat([c14, c9], dim=1)
         c16 = self.head_elan_3(c15)
-
+        # print('c16', c16.size())
         # P4 -> P5
         c17 = self.mp2(c16)
         c18 = torch.cat([c17, c5], dim=1)
         c19 = self.head_elan_4(c18)
+        p3 = c13
+        p4 = c16
+        p5 = c19
+        p3 = self.refine_p3(p3)
+        p4 = self.refine_p4(p4)
+        p5 = self.refine_p5(p5)
 
-        return C2, c5, c8, c12, c13, c16, c19
+        # print('c19', c19.size())
+        return C2, c5, c8, c12, c13, c16, c19, p3, p4, p5
 
 # PaFPN-ELAN (YOLOv7's)
 class PaFPNELAN_Ghost(nn.Module):
@@ -1400,6 +1413,7 @@ class PaFPNELAN_Ghost(nn.Module):
                                      act=act)
 
         self.SPPCSPC = GhostSPPCSPC(c5, 512)
+        
 
     def forward(self, features):
         # c3, c4, c5
@@ -2127,7 +2141,7 @@ class FPN_C2(nn.Module):
         self.dim = dim
 
     def forward(self, x):
-        c2 , _ , _ , _ , _ , _ , _ = x
+        c2 , _ , _ , _ , _ , _ , _, _, _, _ = x
         return c2
 
 class FPN_C3(nn.Module):
@@ -2136,7 +2150,7 @@ class FPN_C3(nn.Module):
         self.dim = dim
 
     def forward(self, x):
-        _ , _ , _ , n2 , _ , _ , _ = x
+        _ , _ , _ , n2 , _ , _ , _, _, _, _ = x
         return n2
 
 class FPN_C4(nn.Module):
@@ -2145,7 +2159,7 @@ class FPN_C4(nn.Module):
         self.dim = dim
 
     def forward(self, x):
-        _ , _ , n3 ,_ ,  _ , _ , _ = x
+        _ , _ , n3 ,_ ,  _ , _ , _, _, _, _ = x
         return n3
 
 class seg_head(nn.Module):

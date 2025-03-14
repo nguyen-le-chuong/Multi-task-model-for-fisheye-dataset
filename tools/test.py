@@ -83,7 +83,7 @@ def main():
     model_dict = model.state_dict()
     checkpoint_file = args.weights
     logger.info("=> loading checkpoint '{}'".format(checkpoint_file))
-    checkpoint = torch.load(checkpoint_file)
+    checkpoint = torch.load(checkpoint_file[0])
     checkpoint_dict = checkpoint['state_dict']
     # checkpoint_dict = {k: v for k, v in checkpoint['state_dict'].items() if k.split(".")[1] in det_idx_range}
     model_dict.update(checkpoint_dict)
@@ -104,6 +104,7 @@ def main():
     valid_dataset = eval('dataset.' + cfg.DATASET.DATASET)(
         cfg=cfg,
         is_train=False,
+        split='val',
         inputsize=cfg.MODEL.IMAGE_SIZE,
         transform=transforms.Compose([
             transforms.ToTensor(),
@@ -122,7 +123,7 @@ def main():
     print('load data finished')
 
     epoch = 0 #special for test
-    da_segment_results,ll_segment_results,detect_results, total_loss,maps, times = validate(
+    da_segment_results,person_segment_results, vehicle_segment_results, ll_segment_results,detect_results, total_loss,maps, times, metric_lane, results_lane = validate(
         epoch,cfg, valid_loader, valid_dataset, model, criterion,
         final_output_dir, tb_log_dir, writer_dict,
         logger, device
@@ -130,14 +131,21 @@ def main():
     fi = fitness(np.array(detect_results).reshape(1, -1))
     msg =   'Test:    Loss({loss:.3f})\n' \
             'Driving area Segment: Acc({da_seg_acc:.3f})    IOU ({da_seg_iou:.3f})    mIOU({da_seg_miou:.3f})\n' \
-                      'Lane line Segment: Acc({ll_seg_acc:.3f})    IOU ({ll_seg_iou:.3f})  mIOU({ll_seg_miou:.3f})\n' \
-                      'Detect: P({p:.3f})  R({r:.3f})  mAP@0.5({map50:.3f})  mAP@0.5:0.95({map:.3f})\n'\
-                      'Time: inference({t_inf:.4f}s/frame)  nms({t_nms:.4f}s/frame)'.format(
-                          loss=total_loss, da_seg_acc=da_segment_results[0],da_seg_iou=da_segment_results[1],da_seg_miou=da_segment_results[2],
-                          ll_seg_acc=ll_segment_results[0],ll_seg_iou=ll_segment_results[1],ll_seg_miou=ll_segment_results[2],
-                          p=detect_results[0],r=detect_results[1],map50=detect_results[2],map=detect_results[3],
-                          t_inf=times[0], t_nms=times[1])
+            'Person Segment: Acc({person_seg_acc:.3f})    IOU ({person_seg_iou:.3f})    mIOU({person_seg_miou:.3f})\n' \
+            'Vehicle Segment: Acc({vehicle_seg_acc:.3f})    IOU ({vehicle_seg_iou:.3f})    mIOU({vehicle_seg_miou:.3f})\n' \
+            'Lane line Segment: Acc({ll_seg_acc:.3f})    IOU ({ll_seg_iou:.3f})  mIOU({ll_seg_miou:.3f})\n' \
+            'Detect: P({p:.3f})  R({r:.3f})  mAP@0.5({map50:.3f})  mAP@0.5:0.95({map:.3f})\n'\
+            'Time: inference({t_inf:.4f}s/frame)  nms({t_nms:.4f}s/frame)'.format(
+                epoch,  loss=total_loss, da_seg_acc=da_segment_results[0],da_seg_iou=da_segment_results[1],da_seg_miou=da_segment_results[2],
+                person_seg_acc=person_segment_results[0],person_seg_iou=person_segment_results[1],person_seg_miou=person_segment_results[2],
+                vehicle_seg_acc=vehicle_segment_results[0],vehicle_seg_iou=vehicle_segment_results[1],vehicle_seg_miou=vehicle_segment_results[2],
+                ll_seg_acc=ll_segment_results[0],ll_seg_iou=ll_segment_results[1],ll_seg_miou=ll_segment_results[2],
+                p=detect_results[0],r=detect_results[1],map50=detect_results[2],map=detect_results[3],
+                t_inf=times[0], t_nms=times[1])
     logger.info(msg)
+    logger.info('Lanes regression: {}'.format(results_lane))
+    logger.info('Lanes metric: {}'.format(metric_lane))
+
     print("test finish")
 
 
