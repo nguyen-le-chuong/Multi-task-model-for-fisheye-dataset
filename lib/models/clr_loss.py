@@ -219,7 +219,7 @@ class CLR_Loss(nn.Module):
             iou_loss /= (len(targets) * self.refine_layers)
 
             loss = cls_loss * cls_loss_weight + reg_xytl_loss * xyt_loss_weight \
-                + seg_loss * seg_loss_weight + iou_loss * iou_loss_weight
+                 + iou_loss * iou_loss_weight + seg_loss * seg_loss_weight
 
             return_value = {
                 'loss': loss,

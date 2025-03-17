@@ -202,6 +202,7 @@ class AutoDriveDataset(Dataset):
         extrap_ys = sample_ys[sample_ys > domain_max_y]
         extrap_xs = np.polyval(extrap, extrap_ys)
         all_xs = np.hstack((extrap_xs, interp_xs))
+        # all_xs = np.hstack(interp_xs)
 
         # separate between inside and outside points
         inside_mask = (all_xs >= 0) & (all_xs < self.img_w)

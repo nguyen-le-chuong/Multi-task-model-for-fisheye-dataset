@@ -101,7 +101,10 @@ class LaneEval(object):
             accuracy += a
             fp += p
             fn += n
+            # print(n)
         num = len(gts)
+        # print(num)
+        # print('fn', fn)
         # the first return parameter is the default ranking parameter
 
         fp = fp / num

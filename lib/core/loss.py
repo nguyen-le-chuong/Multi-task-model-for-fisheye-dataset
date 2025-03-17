@@ -116,9 +116,9 @@ class MultiHeadLoss(nn.Module):
         vehicle_seg_loss *= 0.2 * self.lambdas[5]
         ll_seg_loss *= 0.2 * self.lambdas[6]
         ll_tversky_loss *= 0.2 * self.lambdas[7]
-        reg_all_loss *= 0.02 * self.lambdas[8]
+        reg_all_loss *= 0.01 * self.lambdas[8]
         
-        loss = det_all_loss + da_seg_loss + person_seg_loss +  person_tversky_loss + vehicle_seg_loss + ll_seg_loss + ll_tversky_loss + reg_all_loss
+        loss = det_all_loss + da_seg_loss + person_seg_loss  + vehicle_seg_loss + ll_seg_loss + ll_tversky_loss + reg_all_loss
 
         return loss, (det_all_loss.item(), da_seg_loss.item(), person_seg_loss.item(), person_tversky_loss.item(), vehicle_seg_loss.item(), ll_seg_loss.item(), ll_tversky_loss.item(), reg_all_loss.item(),  loss.item())
 

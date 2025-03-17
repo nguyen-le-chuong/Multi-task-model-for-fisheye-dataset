@@ -7,6 +7,7 @@ import imageio
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
+from lib.utils.visualization import imshow_lanes
 
 print(sys.path)
 import cv2
@@ -53,8 +54,8 @@ def detect(cfg,opt):
     model.load_state_dict(checkpoint['state_dict'])
     # model.fuse()
     model = model.to(device)
-    if half:
-        model.half()  # to FP16
+    # if half:
+    #     model.half()  # to FP16
 
     # Set Dataloader
     if opt.source.isnumeric():
@@ -70,17 +71,17 @@ def detect(cfg,opt):
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
 
     # Run inference
-    vid_path, vid_writer = None, None
-    img = torch.zeros((1, 3, opt.img_size, opt.img_size), device=device)  # init img
-    _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
+    # vid_path, vid_writer = None, None
+    # img = torch.zeros((1, 3, 512, 640), device=device)  # init img
+    # _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
     model.eval()
 
-    # # flops and params
-    # # ------------------------start--------------------------
+    # flops and params
+    # ------------------------start--------------------------
 
     # from ptflops import get_model_complexity_info
     # with torch.cuda.device(0):
-    #     macs, params = get_model_complexity_info(model, (3, 384, 640), as_strings=True,
+    #     macs, params = get_model_complexity_info(model, (3, 512, 640), as_strings=True,
     #                                             print_per_layer_stat=False, verbose=False)
     #     print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
     #     print('{:<30}  {:<8}'.format('Number of parameters: ', params))
@@ -103,24 +104,25 @@ def detect(cfg,opt):
 
     for i, (path, img, img_det, vid_cap,shapes) in tqdm(enumerate(dataset),total = len(dataset)):
         img = transform(img).to(device)
-        img = img.half() if half else img.float()  # uint8 to fp16/32
+        # print(img.shape)
+        # img = img.half() if half else img.float()  # uint8 to fp16/32
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
         
         # Inference
-        det_out, da_seg_out, person_seg_out, vehicle_seg_out, ll_seg_out = model(img)
+        if 'front' not in Path(path).name:
+            continue
+        det_out, da_seg_out, person_seg_out, vehicle_seg_out, ll_seg_out, (lane_reg_out, lan_reg_lists) = model(img)
         inf_out, _ = det_out
 
         # Apply NMS
         det_pred = non_max_suppression(inf_out, conf_thres=opt.conf_thres, iou_thres=opt.iou_thres, classes=None, agnostic=False)
 
         det=det_pred[0]
-        if 'right' not in Path(path).name:
-            continue
         save_path = str(opt.save_dir +'/'+ Path(path).name) if dataset.mode != 'stream' else str(opt.save_dir + '/' + "web.mp4")
 
         _, _, height, width = img.shape
-        print(img_det.shape)
+        # print(img_det.shape)
         h,w,_=img_det.shape
         pad_w, pad_h = shapes[1][1]
         pad_w = int(pad_w)
@@ -165,16 +167,18 @@ def detect(cfg,opt):
             img_det = img_det[..., ::-1]
 
             img_det = show_seg_result(img_det, (da_seg_mask, person_seg_mask, vehicle_seg_mask, ll_seg_mask), _, _, is_demo=True)
-            img_det = cv2.resize(img_det, (1280, 800), interpolation=cv2.INTER_LINEAR)
+            img_det = cv2.resize(img_det, (1280, 966), interpolation=cv2.INTER_LINEAR)
             if len(det):
                 #print('img', img.shape[2:])
                 # print(img_det.shape)
-                det[:,:4] = scale_coords(img.shape[2:],det[:,:4],(800, 1280, 3)).round()
+                det[:,:4] = scale_coords(img.shape[2:],det[:,:4],(966, 1280, 3)).round()
                 for *xyxy,conf,cls in reversed(det):
                     label_det_pred = f'{conf:.2f}'
                     plot_one_box(xyxy, img_det , label=label_det_pred, color=(0,255,255), line_thickness=2)       
-            
-            cv2.imwrite(save_path,img_det)
+            lanes = [lane.to_array(cfg) for lane in lane_reg_out[0]]
+            imshow_lanes(img_det, lanes, out_file=save_path)
+
+            # cv2.imwrite(save_path,img_det)
 
         elif dataset.mode == 'video':
             img_det = img_det[..., ::-1]

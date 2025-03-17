@@ -4,7 +4,7 @@ from yacs.config import CfgNode as CN
 
 _C = CN()
 
-_C.LOG_DIR =  'runs/'
+_C.LOG_DIR =  'runs_p/'
 _C.GPUS = (0,)     # 显卡数 = len(GPUS)
 _C.WORKERS = 8      # 指数据装载时cpu所使用的线程数，默认为8（注意，一般默使用8的话，会报错~~。原因是爆系统内存）
 _C.PIN_MEMORY = True
@@ -87,7 +87,7 @@ _C.DATASET.HSV_V = 0.4  # image HSV-Value augmentation (fraction)
 
 # train
 _C.TRAIN = CN(new_allowed=True)
-_C.TRAIN.LR0 = 0.01  # initial learning rate (SGD=1E-2, Adam=1E-3)
+_C.TRAIN.LR0 = 0.001  # initial learning rate (SGD=1E-2, Adam=1E-3)
 _C.TRAIN.LRF = 0.1  # final OneCycleLR learning rate (lr0 * lrf)
 _C.TRAIN.WARMUP_EPOCHS = 3.0
 _C.TRAIN.WARMUP_BIASE_LR = 0.1
@@ -104,7 +104,7 @@ _C.TRAIN.BEGIN_EPOCH = 0
 _C.TRAIN.END_EPOCH = 80
 
 _C.TRAIN.VAL_FREQ = 1
-_C.TRAIN.BATCH_SIZE_PER_GPU = 16
+_C.TRAIN.BATCH_SIZE_PER_GPU = 8
 _C.TRAIN.SHUFFLE = True
 
 _C.TRAIN.IOU_THRESHOLD = 0.2
@@ -129,7 +129,7 @@ _C.TRAIN.PLOT = False                #
 
 # testing
 _C.TEST = CN(new_allowed=True)
-_C.TEST.BATCH_SIZE_PER_GPU = 16
+_C.TEST.BATCH_SIZE_PER_GPU = 8
 _C.TEST.MODEL_FILE = ''
 _C.TEST.SAVE_JSON = False
 _C.TEST.SAVE_TXT = False
@@ -142,7 +142,7 @@ _C.TEST.NMS_IOU_THRESHOLD  = 0.6
 _C.iou_loss_weight = 2.
 _C.cls_loss_weight = 6.
 _C.xyt_loss_weight = 0.5
-_C.seg_loss_weight = 1.0
+_C.seg_loss_weight = 0.5
 _C.img_w = 640
 _C.img_h = 512
 _C.num_classes = 13 + 1

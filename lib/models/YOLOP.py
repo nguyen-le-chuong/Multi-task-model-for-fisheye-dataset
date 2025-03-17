@@ -26,6 +26,96 @@ from lib.models.YOLOX_Head_scales_noshare import YOLOXHead
 from lib.models.clr_head import CLRHead
 # 修改
 # The lane line and the driving area segment branches without share information with each other and without link
+# YOLOP = [
+# ###### prediction head index
+# # [2, 16, 28],   #Det_out_idx, Da_Segout_idx, LL_Segout_idx no_use c2
+# [2, 16, 30, 42, 55, 56],   #Det_out_idx, Da_Segout_idx, person, vehicle, LL_Segout_idx use_c2
+
+# ###### Backbone
+# [ -1, ELANNet, [True]],   #0
+
+# ###### PaFPNELAN
+# [ -1, PaFPNELAN, []],   #1
+
+# ###### Detect Head
+# [ -1, YOLOXHead,  [1]], #2 #Detection head
+
+# # ###### 渐进式上采样
+# [ 1, FPN_C3, []],   #3
+# [ 1, FPN_C4, []],   #4
+
+# # segmentation head
+# [ 4, Conv, [512, 256, 3, 1]],  
+# [ -1, Upsample, [None, 2, 'bilinear']],  
+# [ -1, ELANBlock_Head, [256, 128]],
+# [ -1, Conv, [128, 64, 3, 1]], 
+# [ -1, Upsample, [None, 2, 'bilinear']], 
+# [ -1, Conv, [64, 32, 3, 1]], 
+# [ -1, Upsample, [None, 2, 'bilinear']], 
+# [ -1, Conv, [32, 16, 3, 1]], 
+# [ -1, ELANBlock_Head, [16, 8]], 
+# [ -1, Upsample, [None, 2, 'bilinear']], 
+# [ -1, Conv, [8, 2, 3, 1]], 
+# [ -1, seg_head, ['sigmoid']],  #16 segmentation head
+
+# # # no use C2
+# ###########
+
+# ###########
+# [ 1, FPN_C2, []],  #17
+# [ -1, Conv, [256, 128, 3, 1]],    #18
+# # sum c2 and p3
+
+# [ 4, Conv, [512, 256, 3, 1]],  #19
+# [ -1, Upsample, [None, 2, 'bilinear']],  
+# [ -1, ELANBlock_Head, [256, 128]],
+# [ -1, Conv, [128, 64, 3, 1]],
+# [ -1, Upsample, [None, 2, 'bilinear']],
+# [ -1, Conv, [64, 32, 3, 1]],
+# [ -1, Upsample, [None, 2, 'bilinear']],
+# [ -1, Conv, [32, 16, 3, 1]],
+# [ -1, ELANBlock_Head, [16, 8]],
+# [ -1, Upsample, [None, 2, 'bilinear']],
+# [ -1, Conv, [8, 2, 3, 1]],
+# [ -1, seg_head, ['sigmoid']], #30  # Vehicle segmentation head
+
+# [ 4, Conv, [512, 256, 3, 1]],  
+# [ -1, Upsample, [None, 2, 'bilinear']],  
+# [ -1, ELANBlock_Head, [256, 128]],
+# [ -1, Conv, [128, 64, 3, 1]],
+# [ -1, Upsample, [None, 2, 'bilinear']],
+# [ -1, Conv, [64, 32, 3, 1]],
+# [ -1, Upsample, [None, 2, 'bilinear']],
+# [ -1, Conv, [32, 16, 3, 1]],
+# [ -1, ELANBlock_Head, [16, 8]],
+# [ -1, Upsample, [None, 2, 'bilinear']],
+# [ -1, Conv, [8, 2, 3, 1]],
+# [ -1, seg_head, ['sigmoid']], #42  # Vehicle segmentation head
+# # use C2
+# ###########
+# # [ 1, FPN_C2, []],  #44
+# # [ -1, Conv, [256, 128, 3, 1]],    #45
+# # sum c2 and p3
+# [ 3, Conv, [256, 128, 3, 1]],  
+# [ -1, Upsample, [None, 2, 'bilinear']],  
+# [ [-1, 18], MergeBlock, ["add"]],    #C2 and P3
+# [ -1, ELANBlock_Head, [128, 64]], 
+# [ -1, PSA_p, [64, 64]], 
+# [ -1, Conv, [64, 32, 3, 1]], 
+# [ -1, Upsample, [None, 2, 'bilinear']], 
+# [ -1, Conv, [32, 16, 3, 1]], 
+# [ -1, ELANBlock_Head, [16, 8]], 
+# [ -1, PSA_p, [8, 8]], 
+# [ -1, Upsample, [None, 2, 'bilinear']], 
+# [ -1, Conv, [8, 2, 3, 1]], #
+# [ -1, seg_head, ['sigmoid']],  #55 segmentation head
+
+# [1, CLRHead,  [1]],  #56 # New head
+
+
+
+# ]
+
 YOLOP = [
 ###### prediction head index
 # [2, 16, 28],   #Det_out_idx, Da_Segout_idx, LL_Segout_idx no_use c2
@@ -90,7 +180,7 @@ YOLOP = [
 [ -1, Conv, [8, 2, 3, 1]], #
 [ -1, seg_head, ['sigmoid']],  #31 segmentation head
 
-# [ 4, Conv, [512, 256, 3, 1]],  #17
+# [ 4, Conv, [512, 256, 3, 1]],  #19
 # [ -1, Upsample, [None, 2, 'bilinear']],  
 # [ -1, ELANBlock_Head, [256, 128]],
 # [ -1, Conv, [128, 64, 3, 1]],
@@ -101,7 +191,7 @@ YOLOP = [
 # [ -1, ELANBlock_Head, [16, 8]],
 # [ -1, Upsample, [None, 2, 'bilinear']],
 # [ -1, Conv, [8, 2, 3, 1]],
-# [ -1, seg_head, ['sigmoid']], #28  # Vehicle segmentation head
+# [ -1, seg_head, ['sigmoid']], #30  # Vehicle segmentation head
 
 [ 4, Conv, [512, 256, 3, 1]],  
 [ -1, Upsample, [None, 2, 'bilinear']],  
@@ -114,7 +204,7 @@ YOLOP = [
 [ -1, ELANBlock_Head, [16, 8]],
 [ -1, Upsample, [None, 2, 'bilinear']],
 [ -1, Conv, [8, 2, 3, 1]],
-[ -1, seg_head, ['sigmoid']], #43  # Vehicle segmentation head
+[ -1, seg_head, ['sigmoid']], #43 # Vehicle segmentation head
 # use C2
 ###########
 # [ 1, FPN_C2, []],  #44
@@ -132,9 +222,9 @@ YOLOP = [
 [ -1, PSA_p, [8, 8]], 
 [ -1, Upsample, [None, 2, 'bilinear']], 
 [ -1, Conv, [8, 2, 3, 1]], #
-[ -1, seg_head, ['sigmoid']],  #56 segmentation head
+[ -1, seg_head, ['sigmoid']],  #55 segmentation head
 
-[1, CLRHead,  [1]],  #57 # New head
+[1, CLRHead,  [1]],  #56 # New head
 
 # # use C2
 # ###########
