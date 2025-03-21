@@ -180,7 +180,7 @@ class AutoDriveDataset(Dataset):
         if not np.all(points[1:, 1] < points[:-1, 1]):
             raise Exception('Annotaion points have to be sorted')
         x, y = points[:, 0], points[:, 1]
-
+        # print('x', x)
         # interpolate points inside domain
         assert len(points) > 1
         interp = InterpolatedUnivariateSpline(y[::-1],
@@ -203,7 +203,9 @@ class AutoDriveDataset(Dataset):
         extrap_xs = np.polyval(extrap, extrap_ys)
         all_xs = np.hstack((extrap_xs, interp_xs))
         # all_xs = np.hstack(interp_xs)
-
+        # print('after', all_xs)
+        # print(len(all_xs))
+        # print('after', len(all_xs_int))
         # separate between inside and outside points
         inside_mask = (all_xs >= 0) & (all_xs < self.img_w)
         xs_inside_image = all_xs[inside_mask]
@@ -237,7 +239,7 @@ class AutoDriveDataset(Dataset):
         # print(img_w, img_h)
         # old_lanes = old
         old_lanes = old
-
+        # print(old)
         # removing lanes with less than 2 points
         old_lanes = filter(lambda x: len(x) > 1, old_lanes)
         # sort lane points by Y (bottom to top of the image)
@@ -261,7 +263,6 @@ class AutoDriveDataset(Dataset):
         for lane_idx, lane in enumerate(old_lanes):
             if lane_idx >= self.max_lanes:
                 break
-
             try:
                 xs_outside_image, xs_inside_image = self.sample_lane(
                     lane, self.offsets_ys)
@@ -269,7 +270,9 @@ class AutoDriveDataset(Dataset):
                 continue
             if len(xs_inside_image) <= 1:
                 continue
-            all_xs = np.hstack((xs_outside_image, xs_inside_image))
+            # print(len(xs_outside_image))
+            all_xs = np.hstack((xs_outside_image, xs_inside_image))	
+            # all_xs = np.hstack(xs_inside_image)	
             lanes[lane_idx, 0] = 0
             lanes[lane_idx, 1] = 1
             lanes[lane_idx, 2] = len(xs_outside_image) / self.n_strips
@@ -284,7 +287,7 @@ class AutoDriveDataset(Dataset):
                 thetas.append(theta)
 
             theta_far = sum(thetas) / len(thetas)
-
+            
             # lanes[lane_idx,
             #       4] = (theta_closest + theta_far) / 2  # averaged angle
             lanes[lane_idx, 4] = theta_far
@@ -680,6 +683,7 @@ class AutoDriveDataset(Dataset):
 #             file.write(f"{lane_reg_label}\n")
         target = [labels_out, seg_label, person_label, vehicle_label, lane_label, lane_reg_label]
         # img_lane = self.transform(img_lane)
+
         img = self.transform(img)
 
         # add lane regression

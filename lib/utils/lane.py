@@ -28,7 +28,7 @@ class Lane:
         return lane_xs
 
     def to_array(self, cfg):
-        sample_y = np.linspace(0.2 * 966, 0.98*966, 72, dtype=int).tolist()
+        sample_y = np.linspace(0.04 * 966, 0.86*966, 72, dtype=int).tolist()
         img_w, img_h = 1280, 966
         ys = np.array(sample_y) / float(img_h)
         xs = self(ys)

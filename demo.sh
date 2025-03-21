@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=3 python tools/demo.py --weights /mnt/mmlab2024nas/huycq/chuong/temp/YOLOPX/runs/BddDataset/_2025-03-15-17-36/epoch-80.pth --source /mnt/mmlab2024nas/huycq/chuong/temp/YOLOP/data/woodscape_m/images/val --save-dir inference/woodscape --conf-thres 0.3 --iou-thres 0.45

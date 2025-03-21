@@ -24,10 +24,17 @@
 │ │ ├─YOLOP.py    # Setup and Configuration of model
 │ │ ├─YOLOX_Head.py    # YOLOX's decoupled Head
 │ │ ├─YOLOX_Loss.py    # YOLOX's detection Loss
+│ │ ├─clr_head.py    # CLRNet
+│ │ ├─clr_loss.py    # CLRNet loss
 │ │ ├─commom.py   # calculation module
 │ ├─utils
 │ │ ├─augmentations.py    # data augumentation
 │ │ ├─autoanchor.py   # auto anchor(k-means)
+│ │ ├─dynamic_assign.py
+│ │ ├─lane.py
+│ │ ├─roi_gather.py
+│ │ ├─visualization.py
+│ │ ├─tusimple_metric.py
 │ │ ├─split_dataset.py  # (Campus scene, unrelated to paper)
 │ │ ├─plot.py  # plot_box_and_mask
 │ │ ├─utils.py  # logging、device_select、time_measure、optimizer_select、model_save&initialize 、Distributed training
@@ -57,28 +64,65 @@ See `requirements.txt` for additional dependencies and version requirements.
 pip install -r requirements.txt
 ```
 
-## Pre-trained Model
-You can get the pre-trained model from <a href="https://pan.baidu.com/s/1k7_M8vrgQCnlY-FlaA0g6Q">baidu</a> or <a href="https://drive.google.com/file/d/1dlwaElu0dQQdoEeJkuP2LKGx1TSCjE-z/view?usp=sharing">google</a>.
-Baidu extraction code：fvuc
-
 ## Dataset
-For BDD100K: [imgs](https://bdd-data.berkeley.edu/), [det_annot](https://drive.google.com/file/d/1d5osZ83rLwda7mfT3zdgljDiQO3f9B5M/view), [da_seg_annot](https://drive.google.com/file/d/1yNYLtZ5GVscx7RzpOd8hS7Mh7Rs6l3Z3/view), [ll_seg_annot](https://drive.google.com/file/d/1BPsyAjikEM9fqsVNMIygvdVVPrmK1ot-/view)
-
+For WoodScape: [imgs](https://bdd-data.berkeley.edu/), [det_annot](https://drive.google.com/file/d/1d5osZ83rLwda7mfT3zdgljDiQO3f9B5M/view), [da_seg_annot](https://drive.google.com/file/d/1yNYLtZ5GVscx7RzpOd8hS7Mh7Rs6l3Z3/view), [ll_seg_annot](https://drive.google.com/file/d/1BPsyAjikEM9fqsVNMIygvdVVPrmK1ot-/view)
+# Transform txt2json
+```bash
+python tools/txt2json.py -i /path/to/original_dataset/box_2d_annotations -o /path/to/original_dataset/box_2d_json_annotations
+```
+# Splitting data
+```bash
+python tools/data_split.py --input_rgbLabels /path/to/original_dataet/semantic_annotations/rgbLabels \
+                 --input_rgbImages /path/to/original_dataset/rgb_images \
+                 --input_2DBox /path/to/original_dataset/box_2d_json_annotations \
+                 --output_base_dir segmented_classes \
+                 --output customized_dataset \
+                 --train_ratio 0.9 \
+                 --num_workers 8 \
+                 --copy_files
+```
+# Generate curb points
+```bash
+# for train
+python tools/gen_regression_annotations.py --mask_dir /path/to/customized_dataset/curb_seg_annotations/train/ --image_dir /path/to/customized_dataset/rgb_images/train/ --output_json /path/to/customized_dataset/rgb_images/train.json
+# for val
+python tools/gen_regression_annotations.py --mask_dir /path/to/customized_dataset/curb_seg_annotations/val/ --image_dir /path/to/customized_dataset/rgb_images/val/ --output_json /path/to/customized_dataset/rgb_images/val.json
+```
 We recommend the dataset directory structure to be the following:
 
-```
+## Dataset Structure
+
+```python
 # The id represent the correspondence relation
-├─dataset root
-│ ├─images
+├─original_dataset # Download from source
+| ├─rgb_images
+| ├─box_2d_annotations
+| ├─box_2d_json_annotations #from txt2json.py
+| ├─semantic_annotations
+| │ ├─rgbLabels
+| | ├─gtLabels
+├─customized_dataset #from data_split.py
+│ ├─rgb_images
 │ │ ├─train
 │ │ ├─val
+│ │ ├─train.json
+│ │ ├─val.json
 │ ├─det_annotations
 │ │ ├─train
 │ │ ├─val
 │ ├─da_seg_annotations
 │ │ ├─train
 │ │ ├─val
-│ ├─ll_seg_annotations
+│ ├─curb_seg_annotations
+│ │ ├─train
+│ │ ├─val
+│ ├─person_seg_annotations
+│ │ ├─train
+│ │ ├─val
+│ ├─vehicle_seg_annotations
+│ │ ├─train
+│ │ ├─val
+│ ├─curb_reg_annotations
 │ │ ├─train
 │ │ ├─val
 ```
@@ -109,9 +153,6 @@ python tools/demo.py --weights weights/epoch-195.pth
                      --iou-thres 0.45
 ```
 
-## License
-
-YOLOPX is released under the [MIT Licence](LICENSE).
 
 ## Acknowledgements
 
@@ -121,4 +162,11 @@ Our work would not be complete without the wonderful work of the following autho
 * [YOLOv5](https://github.com/ultralytics/yolov5)
 * [YOLOv7](https://github.com/WongKinYiu/yolov7)
 * [HybridNets](https://github.com/datvuthanh/HybridNets)
+* [YOLOPX](https://github.com/datvuthanh/HybridNets)
+* [CLRNet](https://github.com/datvuthanh/HybridNets)
 
+
+#step, split test and images 
+txt2json
+data_split
+lane_regression_gen

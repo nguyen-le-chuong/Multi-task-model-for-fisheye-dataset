@@ -1,6 +1,9 @@
 runs/
+runs_test/
 inference/
 config_reg/
 visualized_augmented_data/
 lib/__pycache__/
 videos/
+segmented_classes/
+test_data/

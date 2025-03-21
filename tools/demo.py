@@ -109,9 +109,9 @@ def detect(cfg,opt):
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
         
-        # Inference
-        if 'front' not in Path(path).name:
-            continue
+        # # Inference
+        # if 'front' not in Path(path).name:
+        #     continue
         det_out, da_seg_out, person_seg_out, vehicle_seg_out, ll_seg_out, (lane_reg_out, lan_reg_lists) = model(img)
         inf_out, _ = det_out
 
