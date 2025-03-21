@@ -66,11 +66,11 @@ pip install -r requirements.txt
 
 ## Dataset
 For WoodScape: [imgs](https://bdd-data.berkeley.edu/), [det_annot](https://drive.google.com/file/d/1d5osZ83rLwda7mfT3zdgljDiQO3f9B5M/view), [da_seg_annot](https://drive.google.com/file/d/1yNYLtZ5GVscx7RzpOd8hS7Mh7Rs6l3Z3/view), [ll_seg_annot](https://drive.google.com/file/d/1BPsyAjikEM9fqsVNMIygvdVVPrmK1ot-/view)
-# Transform txt2json
+### Transform txt2json
 ```bash
 python tools/txt2json.py -i /path/to/original_dataset/box_2d_annotations -o /path/to/original_dataset/box_2d_json_annotations
 ```
-# Splitting data
+### Splitting data
 ```bash
 python tools/data_split.py --input_rgbLabels /path/to/original_dataet/semantic_annotations/rgbLabels \
                  --input_rgbImages /path/to/original_dataset/rgb_images \
@@ -81,7 +81,7 @@ python tools/data_split.py --input_rgbLabels /path/to/original_dataet/semantic_a
                  --num_workers 8 \
                  --copy_files
 ```
-# Generate curb points
+### Generate curb points
 ```bash
 # for train
 python tools/gen_regression_annotations.py --mask_dir /path/to/customized_dataset/curb_seg_annotations/train/ --image_dir /path/to/customized_dataset/rgb_images/train/ --output_json /path/to/customized_dataset/rgb_images/train.json
