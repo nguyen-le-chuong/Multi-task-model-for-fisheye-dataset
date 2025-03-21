@@ -1,73 +1,86 @@
+# Project Structure
 
-
-## Project Structure
-
-```python
+```plaintext
 ├─lib
-│ ├─config/default   # configuration of training and validation
+│ ├─config/default   # Configuration of training and validation
 │ ├─core    
-│ │ ├─activations.py   # activation function
-│ │ ├─evaluate.py   # calculation of metric
-│ │ ├─function.py   # training and validation of model
-│ │ ├─general.py   #calculation of metric、nms、conversion of data-format、visualization
-│ │ ├─loss.py   # loss function
-│ │ ├─postprocess.py   # postprocess(refine da-seg and ll-seg, unrelated to paper)
+│ │ ├─activations.py   # Activation functions
+│ │ ├─evaluate.py      # Metric calculations
+│ │ ├─function.py      # Training and validation of the model
+│ │ ├─general.py       # Metrics, NMS, data-format conversions, visualization
+│ │ ├─loss.py          # Loss functions
+│ │ ├─postprocess.py   # Refinement (unrelated to paper)
 │ ├─dataset
-│ │ ├─AutoDriveDataset.py   # Superclass dataset，general function
-│ │ ├─bdd.py   # Subclass dataset，specific function
+│ │ ├─AutoDriveDataset.py   # Superclass dataset with general functions
+│ │ ├─bdd.py                # Subclass dataset with specific functions
 │ │ ├─convect.py 
-│ │ ├─DemoDataset.py   # demo dataset(image, video and stream)
+│ │ ├─DemoDataset.py        # Demo dataset (image, video, and stream)
 │ ├─models
-│ │ ├─YOLOP.py    # Setup and Configuration of model
-│ │ ├─YOLOX_Head.py    # YOLOX's decoupled Head
-│ │ ├─YOLOX_Loss.py    # YOLOX's detection Loss
-│ │ ├─clr_head.py    # CLRNet
-│ │ ├─clr_loss.py    # CLRNet loss
-│ │ ├─commom.py   # calculation module
+│ │ ├─YOLOP.py        # Setup and configuration of the model
+│ │ ├─YOLOX_Head.py   # YOLOX's decoupled head
+│ │ ├─YOLOX_Loss.py   # YOLOX's detection loss
+│ │ ├─clr_head.py     # CLRNet head
+│ │ ├─clr_loss.py     # CLRNet loss
+│ │ ├─commom.py       # Calculation modules
 │ ├─utils
-│ │ ├─augmentations.py    # data augumentation
-│ │ ├─autoanchor.py   # auto anchor(k-means)
+│ │ ├─augmentations.py       # Data augmentation
+│ │ ├─autoanchor.py          # Auto anchor (k-means clustering)
 │ │ ├─dynamic_assign.py
 │ │ ├─lane.py
 │ │ ├─roi_gather.py
 │ │ ├─visualization.py
 │ │ ├─tusimple_metric.py
-│ │ ├─split_dataset.py  # (Campus scene, unrelated to paper)
-│ │ ├─plot.py  # plot_box_and_mask
-│ │ ├─utils.py  # logging、device_select、time_measure、optimizer_select、model_save&initialize 、Distributed training
+│ │ ├─split_dataset.py       # Campus scene splitting (unrelated to paper)
+│ │ ├─plot.py                # Plot boxes and masks
+│ │ ├─utils.py               # Logging, device selection, optimizers, distributed training
 │ ├─run
-│ │ ├─dataset/training time  # Visualization, logging and model_save
+│ │ ├─dataset/training time  # Visualization, logging, and model saving
 ├─tools
-│ │ ├─demo.py    # demo(folder、camera)
+│ │ ├─demo.py    # Demo for folder or camera
 │ │ ├─test.py    
 │ │ ├─train.py    
-├─weights    # Pretraining model
+├─weights    # Pretrained models
 ```
 
 ---
 
-## Requirement
+# Requirements
 
-This codebase has been developed with python version 3.7, PyTorch 1.12+ and torchvision 0.13+
-```setup
+This codebase has been developed using Python 3.7, PyTorch 1.12+, and torchvision 0.13+.
+
+```bash
+# Install using pip
 pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
 ```
-or
-```setup
+
+Alternatively, use Conda:
+
+```bash
 conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
 ```
-See `requirements.txt` for additional dependencies and version requirements.
-```setup
+
+For additional dependencies, refer to `requirements.txt`:
+
+```bash
 pip install -r requirements.txt
 ```
 
-## Dataset
-For WoodScape: [Google Drive](https://drive.google.com/drive/folders/1ltj1QSNQJhThv8DVemM_l-G-GIH3JjMb)
-### Transform txt2json
+---
+
+# Dataset
+
+## WoodScape Dataset
+
+[Google Drive Link](https://drive.google.com/drive/folders/1ltj1QSNQJhThv8DVemM_l-G-GIH3JjMb)
+
+### Transform TXT to JSON
+
 ```bash
 python tools/txt2json.py -i /path/to/original_dataset/box_2d_annotations -o /path/to/original_dataset/box_2d_json_annotations
 ```
-### Splitting data
+
+### Splitting Data
+
 ```bash
 python tools/data_split.py --input_rgbLabels /path/to/original_dataet/semantic_annotations/rgbLabels \
                  --input_rgbImages /path/to/original_dataset/rgb_images \
@@ -78,27 +91,30 @@ python tools/data_split.py --input_rgbLabels /path/to/original_dataet/semantic_a
                  --num_workers 8 \
                  --copy_files
 ```
-### Generate curb points
+
+### Generate Curb Points
+
 ```bash
-# for train
+# For training
 python tools/gen_regression_annotations.py --mask_dir /path/to/customized_dataset/curb_seg_annotations/train/ --image_dir /path/to/customized_dataset/rgb_images/train/ --output_json /path/to/customized_dataset/rgb_images/train.json
-# for val
+
+# For validation
 python tools/gen_regression_annotations.py --mask_dir /path/to/customized_dataset/curb_seg_annotations/val/ --image_dir /path/to/customized_dataset/rgb_images/val/ --output_json /path/to/customized_dataset/rgb_images/val.json
 ```
-We recommend the dataset directory structure to be the following:
 
-## Dataset Structure
+---
 
-```python
-# The id represent the correspondence relation
+# Recommended Dataset Structure
+
+```plaintext
 ├─original_dataset # Download from source
 | ├─rgb_images
 | ├─box_2d_annotations
-| ├─box_2d_json_annotations #from txt2json.py
+| ├─box_2d_json_annotations # Generated by txt2json.py
 | ├─semantic_annotations
 | │ ├─rgbLabels
 | | ├─gtLabels
-├─customized_dataset #from data_split.py
+├─customized_dataset # Generated by data_split.py
 │ ├─rgb_images
 │ │ ├─train
 │ │ ├─val
@@ -124,46 +140,55 @@ We recommend the dataset directory structure to be the following:
 │ │ ├─val
 ```
 
-Update the your dataset path in the `./lib/config/default.py`.
+Update dataset paths in `./lib/config/default.py`.
 
-## Training
+---
 
-```shell
+# Training
+
+```bash
 python tools/train.py
 ```
 
-## Evaluation
+---
 
-```shell
+# Evaluation
+
+```bash
 python tools/test.py --weights weights/epoch-195.pth
 ```
 
-## Demo
+---
 
-You can store the image or video in `--source`, and then save the reasoning result to `--save-dir`
+# Demo
 
-```shell
-python tools/demo.py --weights weights/epoch-195.pth
-                     --source inference/image
-                     --save-dir inference/image_output
-                     --conf-thres 0.3
+Store images or videos in `--source` and save the output to `--save-dir`.
+
+```bash
+python tools/demo.py --weights weights/epoch-195.pth \
+                     --source inference/image \
+                     --save-dir inference/image_output \
+                     --conf-thres 0.3 \
                      --iou-thres 0.45
 ```
 
+---
 
-## Acknowledgements
+# Visualization
 
-Our work would not be complete without the wonderful work of the following authors:
+![Front View](images/00059_FV.png)
+![Rear View](images/00607_RV.png)
+![Right View](images/00281_MVR.png)
+![Left View](images/00536_MVL.png)
 
-* [YOLOP](https://github.com/hustvl/YOLOP)
-* [YOLOv5](https://github.com/ultralytics/yolov5)
-* [YOLOv7](https://github.com/WongKinYiu/yolov7)
-* [HybridNets](https://github.com/datvuthanh/HybridNets)
-* [YOLOPX](https://github.com/datvuthanh/HybridNets)
-* [CLRNet](https://github.com/datvuthanh/HybridNets)
+---
 
+# Acknowledgements
 
-#step, split test and images 
-txt2json
-data_split
-lane_regression_gen
+This work builds upon the contributions of the following repositories:
+
+- [YOLOP](https://github.com/hustvl/YOLOP)
+- [YOLOv5](https://github.com/ultralytics/yolov5)
+- [YOLOv7](https://github.com/WongKinYiu/yolov7)
+- [HybridNets](https://github.com/datvuthanh/HybridNets)
+- [CLRNet](https://github.com/Turoad/CLRNet)
