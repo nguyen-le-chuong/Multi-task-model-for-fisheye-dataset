@@ -3,9 +3,6 @@
 ## Project Structure
 
 ```python
-├─inference
-│ ├─image   # inference images
-│ ├─image_output   # inference result
 ├─lib
 │ ├─config/default   # configuration of training and validation
 │ ├─core    
@@ -65,7 +62,7 @@ pip install -r requirements.txt
 ```
 
 ## Dataset
-For WoodScape: [imgs](https://bdd-data.berkeley.edu/), [det_annot](https://drive.google.com/file/d/1d5osZ83rLwda7mfT3zdgljDiQO3f9B5M/view), [da_seg_annot](https://drive.google.com/file/d/1yNYLtZ5GVscx7RzpOd8hS7Mh7Rs6l3Z3/view), [ll_seg_annot](https://drive.google.com/file/d/1BPsyAjikEM9fqsVNMIygvdVVPrmK1ot-/view)
+For WoodScape: [Google Drive](https://drive.google.com/drive/folders/1ltj1QSNQJhThv8DVemM_l-G-GIH3JjMb)
 ### Transform txt2json
 ```bash
 python tools/txt2json.py -i /path/to/original_dataset/box_2d_annotations -o /path/to/original_dataset/box_2d_json_annotations
