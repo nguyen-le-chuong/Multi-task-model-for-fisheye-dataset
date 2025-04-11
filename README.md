@@ -2,6 +2,7 @@
 
 ```plaintext
 ├─lib
+├─clrnet #for build setup.py
 │ ├─config/default   # Configuration of training and validation
 │ ├─core    
 │ │ ├─activations.py   # Activation functions
@@ -63,8 +64,13 @@ For additional dependencies, refer to `requirements.txt`:
 
 ```bash
 pip install -r requirements.txt
+# Optional fixing: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh && source $HOME/.cargo/env
 ```
 
+Install CLRNet packages
+```bash
+python setup.py build develop
+```
 ---
 
 # Dataset
@@ -165,7 +171,7 @@ python tools/test.py --weights weights/epoch-195.pth
 Store images or videos in `--source` and save the output to `--save-dir`.
 
 ```bash
-python tools/demo.py --weights weights/epoch-195.pth \
+python tools/demo.py --weights checkpoints/epoch-80.pth \
                      --source inference/image \
                      --save-dir inference/image_output \
                      --conf-thres 0.3 \
@@ -187,8 +193,5 @@ python tools/demo.py --weights weights/epoch-195.pth \
 
 This work builds upon the contributions of the following repositories:
 
-- [YOLOP](https://github.com/hustvl/YOLOP)
-- [YOLOv5](https://github.com/ultralytics/yolov5)
-- [YOLOv7](https://github.com/WongKinYiu/yolov7)
-- [HybridNets](https://github.com/datvuthanh/HybridNets)
+- [YOLOPX](https://github.com/jiaoZ7688/YOLOPX)
 - [CLRNet](https://github.com/Turoad/CLRNet)
